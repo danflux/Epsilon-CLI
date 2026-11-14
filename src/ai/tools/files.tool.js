@@ -1,6 +1,7 @@
 import { tool } from "langchain";
 import * as z from "zod";
 import fs from "fs/promises";
+import path from "path";
 
 /**
  * Create/Update multiple files at once (create one if not existed)

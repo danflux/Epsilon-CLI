@@ -4,7 +4,7 @@ import {
   saveApiKey,
   validateApiKey,
 } from "./utils/file.utils.js";
-import rl from "./utils/readline.js";
+import { closeReadline, getReadline } from "./utils/readline.js";
 
 async function main() {
   try {
@@ -23,7 +23,9 @@ async function main() {
 
     // Keep asking until the user enters a valid key.
     while (!apiKey) {
-      const enteredKey = await rl.question("Please enter your Groq API key: ");
+      const enteredKey = await getReadline().question(
+        "Please enter your Groq API key: ",
+      );
 
       const validation = await validateApiKey(enteredKey);
 
@@ -39,12 +41,14 @@ async function main() {
     }
 
     console.log("API key validated successfully.");
-    await initGraph();
-    
+    await initGraph({ apiKey });
   } catch (error) {
     console.error("Application error:", error.message);
+
+    // A fatal startup failure must be visible to the shell, not swallowed.
+    process.exitCode = 1;
   } finally {
-    rl.close();
+    closeReadline();
   }
 }
 
