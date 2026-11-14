@@ -1,2 +1,5 @@
 node_modules/
 commands.txt
+.env
+.vscode
+Epsilon-CLI-Project-Documentation.md

@@ -1,29 +1,51 @@
-import  initGraph  from "./ai/graph/graph.js";
-import { getSettingsFile ,saveApiKey, getApiKey} from "./utils/file.utils.js";
+import initGraph from "./ai/graph/graph.js";
+import {
+  getSettingsFile,
+  saveApiKey,
+  validateApiKey,
+} from "./utils/file.utils.js";
 import rl from "./utils/readline.js";
 
-async function main(){
+async function main() {
+  try {
+    const settings = await getSettingsFile();
+    let apiKey = settings.apiKey;
 
-    const settings= await getSettingsFile();
-    // console.log(settings)
-    if(!settings.apiKey){
-        const apiKey=await rl.question("Please enter your API key: ")
-        await saveApiKey(apiKey);
+    // Validate an existing saved key once at startup.
+    if (apiKey) {
+      const validation = await validateApiKey(apiKey);
+
+      if (!validation.valid) {
+        console.error(validation.error);
+        apiKey = null;
+      }
     }
 
-    const response=await getApiKey();
-    if(response.error){
-        console.error(response.error);
-        const apiKey=await rl.question("Please enter your API key: ")
-        await saveApiKey(apiKey);
-        return main()
+    // Keep asking until the user enters a valid key.
+    while (!apiKey) {
+      const enteredKey = await rl.question("Please enter your Groq API key: ");
+
+      const validation = await validateApiKey(enteredKey);
+
+      if (!validation.valid) {
+        console.error(validation.error);
+        continue;
+      }
+
+      await saveApiKey(enteredKey);
+      apiKey = enteredKey.trim();
+
+      console.log("API key saved successfully.");
     }
 
-    const apiKey=await response.apiKey
-    console.log("API key set successfully")
-
-    await initGraph()
-    rl.close()
+    console.log("API key validated successfully.");
+    await initGraph();
+    
+  } catch (error) {
+    console.error("Application error:", error.message);
+  } finally {
+    rl.close();
+  }
 }
 
-export default main
+export default main;

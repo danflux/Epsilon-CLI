@@ -1,70 +1,118 @@
-import path from "path";
+
 import fs from "fs/promises";
-import { HOME_DIR, CONFIG_DIR } from "./constant.js";
+import { CONFIG_DIR, SETTINGS_FILE } from "./constant.js";
 import axios from "axios";
 
 /**
  * Return the content of settings.json file (create if it doesnt exist)
  */
-
 export const getSettingsFile = async () => {
-  //Ensures config dir exists
-  try {
-    await fs.access(CONFIG_DIR);
-  } catch (error) {
-    await fs.mkdir(CONFIG_DIR, { recursive: true });
-  }
-
-  const settingsFilePath = path.join(CONFIG_DIR, "settings.json");
+  await fs.mkdir(CONFIG_DIR, { recursive: true });
 
   try {
-    await fs.access(settingsFilePath);
-    const content = await fs.readFile(settingsFilePath, "utf-8");
+    const content = await fs.readFile(SETTINGS_FILE, "utf-8");
     return JSON.parse(content);
   } catch (error) {
-    await fs.writeFile(settingsFilePath, JSON.stringify({}));
-    return {};
+    if (error.code === "ENOENT") {
+      await fs.writeFile(SETTINGS_FILE, JSON.stringify({}, null, 2), {
+        mode: 0o600,
+      });
+      return {};
+    }
+
+    if (error instanceof SyntaxError) {
+      throw new Error("Settings file contains invalid JSON.");
+    }
+
+    throw error;
   }
+};
+
+/**
+ * Save settings.
+ */
+export const saveSettings = async (settings) => {
+  await fs.mkdir(CONFIG_DIR, { recursive: true });
+
+  await fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2), {
+    mode: 0o600,
+  });
 };
 
 /**
  * save api key to setting file
  */
-export const saveApiKey=async(apiKey)=>{
-    const settingsFilePath=path.join(CONFIG_DIR,"settings.json")
-    const settingsContent=await getSettingsFile();
+export const saveApiKey = async (apiKey) => {
+  if (typeof apiKey !== "string" || !apiKey.trim()) {
+    throw new Error("API key cannot be empty.");
+  }
+  const settings = await getSettingsFile();
 
-    await fs.writeFile(settingsFilePath,JSON.stringify({...settingsContent,apiKey}))
+  settings.apiKey = apiKey.trim();
 
-}
+  await saveSettings(settings);
+};
+
+/**
+ * @returns get API from the settings file
+ */
+export const getApiKey = async () => {
+  const settings = await getSettingsFile();
+  const apiKey = settings.apiKey || null;
+  if (!apiKey) {
+    throw new Error("Groq API key not found");
+  }
+
+  return {
+    apiKey,
+  };
+};
 
 
 /**
- * 
- * @returns get API from the settings file
+ * @param {apiKey} apiKey 
+ * @returns an object { 
+    *           valid:...., 
+    *           error:....
+ *            }
  */
-export const getApiKey=async()=>{
-    const settings=await getSettingsFile()
-    const apiKey= settings.apiKey || null
-    if(!apiKey){
-        return {
-            error:"API key not found in settings file"
-        }
+export const validateApiKey = async (apiKey) => {
+  if (typeof apiKey !== "string" || !apiKey.trim()) {
+    return {
+      valid: false,
+      error: "API key cannot be empty.",
+    };
+  }
+
+  try {
+    await axios.get("https://api.groq.com/openai/v1/models", {
+      headers: {
+        Authorization: `Bearer ${apiKey.trim()}`,
+      },
+      timeout: 10000,
+    });
+
+    return { valid: true };
+  } catch (error) {
+    const status = error.response?.status;
+
+    if (status === 401 || status === 403) {
+      return {
+        valid: false,
+        error: "Invalid or unauthorized API key.",
+      };
     }
 
-    try {
-        
-        const respone =await axios.get("https://api.groq.com/openai/v1/models",{
-            headers:{
-                "Authorization": `Bearer ${apiKey}`
-            }
-        })
-        return {
-            apiKey
-        }
-    } catch (error) {
-        return {
-            error:"Invalid or expired API key"
-        }
+    if (status) {
+      return {
+        valid: false,
+        error: `Groq API returned HTTP ${status}.`,
+      };
     }
-}
+
+    return {
+      valid: false,
+      error: "Unable to connect to Groq. Check your internet connection.",
+    };
+  }
+};

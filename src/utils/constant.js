@@ -3,4 +3,7 @@ import path from "path"
 
 
 export const HOME_DIR = os.homedir();
+
 export const CONFIG_DIR = path.join(HOME_DIR, ".epsilon-cli");
+
+export const SETTINGS_FILE = path.join(CONFIG_DIR, "settings.json");

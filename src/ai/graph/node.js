@@ -50,6 +50,28 @@ export async function LLMNode(state, config) {
  * Handle the tool_calls from the AI
  * @param {Object} State - The state of the Graph
  * @returns {Promise<Object>} - The updated state after handling tool calls
+ * 
+ * AIMessage {
+        content: "",
+        tool_calls: [
+            {
+                id: "call_123",
+                name: "upsertFiles",
+                args: {
+                    files: [
+                        {
+                        path: "./src/index.js",
+                        content: "..."
+                        },
+                        {
+                        path: "./README.md",
+                        content: "..."
+                        }
+                    ]
+                }
+            }
+        ]
+    }
  */
 export async function ToolNode(state, config) {
 
@@ -103,7 +125,6 @@ export async function ToolNode(state, config) {
     }
 
 }
-
 
 
 
