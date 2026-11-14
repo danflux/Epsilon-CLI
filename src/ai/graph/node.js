@@ -1,33 +1,175 @@
-import { ChatGroq } from "@langchain/groq";
-import { getApiKey } from "../../utils/file.utils.js";
-import { AIMessage,HumanMessage,SystemMessage } from "langchain"; 
-import rl from "../../utils/readline.js";
+import { ChatGroq } from "@langchain/groq"
+import { ToolMessage } from "langchain"
+import { getApiKey } from "../../utils/file.utils.js"
+import { AIMessage } from "langchain"
+import { upsertFiles, readFiles, listFiles } from "../tools/files.tool.js"
+import * as fileTools from "../tools/files.tool.js"
+import rl from "../../utils/readline.js"
 
 
-export const LLMNode=async(state,config)=>{
-    
-    const model=new ChatGroq({
+
+
+
+/**
+ * Handles the LLM node logic for the state graph.
+ * @param {Object} state - The current state of the graph.
+ * @returns {Promise<Object>} - The updated state after processing.
+ */
+export async function LLMNode(state, config) {
+
+    const model = new ChatGroq({
         model: "openai/gpt-oss-120b",
-        apiKey:(await getApiKey()).apiKey,
+        apiKey: (await getApiKey()).apiKey,
     })
 
-    const stream=await model.stream(state.messages)
+    const modelWithTool = model.bindTools([ upsertFiles, readFiles, listFiles ])
 
-    let aiMesaage=""
+    const stream = await modelWithTool.stream(state.messages)
 
-    for await (const chunk of stream){
+
+
+    let aiMessage = null
+    for await (const chunk of stream) {
         process.stdout.write(chunk.text)
-        if(!aiMesaage){
-            aiMesaage=chunk;
-        }else{
-            aiMesaage=aiMesaage.concat(chunk)
-        }
+        if (!aiMessage) aiMessage = chunk
+        else aiMessage = aiMessage.concat(chunk)
     }
-    process.stdout.write("\n");
-    return{
-        messages:[
-            ...state.messages,aiMesaage
+
+    process.stdout.write("\n")
+
+    return {
+        messages: [
+            ...state.messages,
+            aiMessage
+        ]
+    }
+}
+
+
+/**
+ * Handle the tool_calls from the AI
+ * @param {Object} State - The state of the Graph
+ * @returns {Promise<Object>} - The updated state after handling tool calls
+ */
+export async function ToolNode(state, config) {
+
+    const messages = state.messages
+    const lastMessage = state.messages[ state.messages.length - 1 ]
+    const toolCalls = lastMessage.tool_calls
+
+    const toolResults = []
+
+    for (const toolCall of toolCalls) {
+
+        switch (toolCall.name) {
+            case "upsertFiles":
+                process.stdout.write(`[Tool]: Updating/creating files ${JSON.stringify(toolCall.args.files.map(f => f.path).join(", "))}\n`)
+                const userInput = await rl.question("Do you want to proceed? (yes/no): ")
+                if (userInput.toLowerCase() !== "yes") {
+                    process.stdout.write("Aborting file update.\n")
+                    return new ToolMessage({
+                        content: "User aborted file update/create.",
+                        tool_call_id: toolCall.id
+                    })
+                }
+                const result = await fileTools.upsertFiles.invoke(toolCall)
+                toolResults.push(result)
+                break;
+            case "readFiles":
+                process.stdout.write(`[Tool]: Reading files ${JSON.stringify(toolCall.args.files.map(f => f.path).join(", "))}\n`)
+                const readResult = await fileTools.readFiles.invoke(toolCall)
+                toolResults.push(readResult)
+                break;
+
+            case "listFiles":
+                process.stdout.write(`[Tool]: Listing files\n`)
+                const listResult = await fileTools.listFiles.invoke(toolCall)
+                toolResults.push(listResult)
+                break;
+
+            default:
+                process.stdout.write(`[Tool]: Unknown tool ${toolCall.name}\n`)
+                break;
+        }
+
+    }
+
+
+    return {
+        messages: [
+            ...state.messages,
+            ...toolResults
         ]
     }
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// import { ChatGroq } from "@langchain/groq";
+// import { getApiKey } from "../../utils/file.utils.js";
+// import { AIMessage,HumanMessage,SystemMessage } from "langchain"; 
+// import rl from "../../utils/readline.js";
+// import * as fileTools from "../tools/files.tool.js"
+
+// /**
+//  * handles the LLM niode logic for state graph
+//  */
+// export const LLMNode=async(state,config)=>{
+    
+//     const model=new ChatGroq({
+//         model: "openai/gpt-oss-120b",
+//         apiKey:(await getApiKey()).apiKey,
+//     })
+
+//     const stream=await model.stream(state.messages)
+
+//     let aiMesaage=null
+
+//     for await (const chunk of stream){
+//         process.stdout.write(chunk.text)
+//         if(!aiMesaage){
+//             aiMesaage=chunk;
+//         }else{
+//             aiMesaage=aiMesaage.concat(chunk)
+//         }
+//     }
+//     process.stdout.write("\n");
+//     return{
+//         messages:[
+//             ...state.messages,aiMesaage
+//         ]
+//     }
+
+// }
+
+// /**
+//  * handles the tool_calls for the ai
+//  */
+
+// export const ToolNode=async(state,config)=>{
+//     const messages=state.messages;
+//     const lastMessage=state.messages[state.messagees.length-1];
+//     const toolcalls=lastMessage.tool_calls
+//     const toolResult=await Promise.all( )
+
+// }
