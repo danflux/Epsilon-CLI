@@ -53,6 +53,22 @@ function describeTarget(toolCall) {
   }
 
   return JSON.stringify(toolCall?.args ?? {});
+  /**
+   * const toolCall = {
+        name: "readFiles",
+        args: {
+            files: [
+                { path: "src/index.js" },
+                { path: "package.json" }
+            ]
+        }
+     };
+     output:
+        [
+         "src/index.js",
+          "package.json"
+        ]
+   */
 }
 
 async function askForApproval(toolCall) {
@@ -194,3 +210,19 @@ export async function ToolNode(state, config) {
     messages: [...messages, ...toolResults],
   };
 }
+// t messages=state.messages;
+//     const lastMessage=state.messages[state.messagees.length-1];
+//     const toolcalls=lastMessage.tool_calls
+//     const toolResult=await Promise.all( )
+
+// }t messages=state.messages;
+//     const lastMessage=state.messages[state.messagees.length-1];
+//     const toolcalls=lastMessage.tool_calls
+//     const toolResult=await Promise.all( )
+
+// }t messages=state.messages;
+//     const lastMessage=state.messages[state.messagees.length-1];
+//     const toolcalls=lastMessage.tool_calls
+//     const toolResult=await Promise.all( )
+
+// }
