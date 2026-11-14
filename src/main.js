@@ -11,7 +11,7 @@ async function main() {
     const settings = await getSettingsFile();
     let apiKey = settings.apiKey;
 
-    // Validate an existing saved key once at startup.
+    // Validate an existing saved key once at startup
     if (apiKey) {
       const validation = await validateApiKey(apiKey);
 
@@ -21,7 +21,7 @@ async function main() {
       }
     }
 
-    // Keep asking until the user enters a valid key.
+    // Keep asking until the user enters a valid key
     while (!apiKey) {
       const enteredKey = await getReadline().question(
         "Please enter your Groq API key: ",
