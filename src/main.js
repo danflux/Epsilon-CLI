@@ -5,8 +5,13 @@ import {
   validateApiKey,
 } from "./utils/file.utils.js";
 import { closeReadline, getReadline } from "./utils/readline.js";
+import { setWorkspaceRoot } from "./utils/workspace.js";
 
 async function main() {
+  // Pin the workspace before any tool can run. Stage 4 turns this single call
+  // into a `--workspace` flag; nothing else reads the root directly.
+  setWorkspaceRoot(process.cwd());
+
   try {
     const settings = await getSettingsFile();
     let apiKey = settings.apiKey;

@@ -1,6 +1,7 @@
 import { ChatGroq } from "@langchain/groq";
 import { ToolMessage } from "langchain";
 import * as fileTools from "../tools/files.tool.js";
+import { policyCodeOf } from "../tools/policy.js";
 import { getReadline } from "../../utils/readline.js";
 
 const MODEL_ID = "openai/gpt-oss-120b";
@@ -53,22 +54,6 @@ function describeTarget(toolCall) {
   }
 
   return JSON.stringify(toolCall?.args ?? {});
-  /**
-   * const toolCall = {
-        name: "readFiles",
-        args: {
-            files: [
-                { path: "src/index.js" },
-                { path: "package.json" }
-            ]
-        }
-     };
-     output:
-        [
-         "src/index.js",
-          "package.json"
-        ]
-   */
 }
 
 async function askForApproval(toolCall) {
@@ -185,13 +170,22 @@ export async function ToolNode(state, config) {
         }),
       );
     } catch (error) {
-      toolResults.push(
-        toolReply(toolCall, {
-          ok: false,
-          code: "TOOL_FAILED",
-          error: error?.message ?? String(error),
-        }),
-      );
+      const payload = {
+        ok: false,
+        code: "TOOL_FAILED",
+        error: error?.message ?? String(error),
+      };
+
+      // A policy refusal keeps `TOOL_FAILED` as its category so every failure is
+      // handled in one place, but carries its precise code so the model can say
+      // why the path was refused instead of guessing.
+      const policyCode = policyCodeOf(error);
+
+      if (policyCode) {
+        payload.policyCode = policyCode;
+      }
+
+      toolResults.push(toolReply(toolCall, payload));
     }
   }
 
@@ -210,19 +204,3 @@ export async function ToolNode(state, config) {
     messages: [...messages, ...toolResults],
   };
 }
-// t messages=state.messages;
-//     const lastMessage=state.messages[state.messagees.length-1];
-//     const toolcalls=lastMessage.tool_calls
-//     const toolResult=await Promise.all( )
-
-// }t messages=state.messages;
-//     const lastMessage=state.messages[state.messagees.length-1];
-//     const toolcalls=lastMessage.tool_calls
-//     const toolResult=await Promise.all( )
-
-// }t messages=state.messages;
-//     const lastMessage=state.messages[state.messagees.length-1];
-//     const toolcalls=lastMessage.tool_calls
-//     const toolResult=await Promise.all( )
-
-// }

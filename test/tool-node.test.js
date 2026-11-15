@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { AIMessage, HumanMessage, ToolMessage } from "langchain";
 import { ToolNode } from "../src/ai/graph/node.js";
+import { getWorkspaceRoot, setWorkspaceRoot } from "../src/utils/workspace.js";
 
 /** Build the minimal graph state the tool node reads. */
 function stateWith(toolCalls) {
@@ -16,9 +17,23 @@ function stateWith(toolCalls) {
   };
 }
 
+/**
+ * A throwaway directory that is also the workspace root for the case. The file
+ * tools are confined to the workspace root, so a case that reads or writes in
+ * `os.tmpdir()` while the root is the repo would be refused by policy instead
+ * of exercising the tool.
+ */
 async function tempDir(t) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "epsilon-test-"));
-  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const previousRoot = getWorkspaceRoot();
+
+  setWorkspaceRoot(dir);
+
+  t.after(async () => {
+    setWorkspaceRoot(previousRoot);
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
   return dir;
 }
 
