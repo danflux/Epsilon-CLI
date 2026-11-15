@@ -52,6 +52,10 @@ The following functionality has been implemented in the current development vers
 - **LangGraph orchestration:** Manage the agent's workflow using a graph-based architecture.
 - **Tool integration:** Provide the agent with tools for reading, listing, and creating/updating files.
 - **Streaming responses:** Stream model responses directly to the terminal.
+- **Workspace confinement:** Every file tool is limited to the workspace root — the directory the CLI is started from. Paths that escape it, including through symlinks and junctions, are refused.
+- **Secret-path protection:** Settings, `.env` files, `.git` internals, `.npmrc`, SSH keys and `*.pem` files cannot be read or written by the agent.
+- **Bounded reads:** Files over 256 KiB are refused, and returned content is capped, so one large file cannot exhaust the context window.
+- **Write approval:** The agent asks before it creates or updates anything on disk.
 
 *Note: Features are being developed incrementally. The complete autonomous coding workflow is not yet finished.*
 
@@ -62,6 +66,7 @@ The following functionality has been implemented in the current development vers
 ```text
 Epsilon-Cli/
 │
+├── cli.js
 ├── src/
 │   │
 │   ├── main.js
@@ -72,12 +77,18 @@ Epsilon-Cli/
 │   │   │   └── node.js
 │   │   │
 │   │   └── tools/
-│   │       └── files.tool.js
+│   │       ├── files.tool.js
+│   │       └── policy.js
 │   │
 │   └── utils/
 │       ├── constant.js
 │       ├── file.utils.js
-│       └── readline.js
+│       ├── readline.js
+│       └── workspace.js
+│
+├── test/
+│   ├── policy.test.js
+│   └── tool-node.test.js
 │
 ├── package.json
 ├── package-lock.json
@@ -89,17 +100,26 @@ Epsilon-Cli/
 
 | File / Directory | Responsibility |
 |---|---|
-| `main.js` | Application entry point and startup logic |
+| `cli.js` | Executable entry shim; maps to the `epsilon` binary |
+| `main.js` | Startup logic: settings, key validation, graph hand-off |
 | `ai/graph/graph.js` | Defines and runs the LangGraph workflow |
 | `ai/graph/node.js` | Contains LLM and tool execution nodes |
 | `ai/tools/files.tool.js` | Defines file-related AI tools |
+| `ai/tools/policy.js` | Workspace containment, secret-path denial, output clamping |
 | `utils/constant.js` | Stores application configuration paths |
 | `utils/file.utils.js` | Handles settings and API key operations |
 | `utils/readline.js` | Handles terminal input |
+| `utils/workspace.js` | Holds the workspace root the tools are confined to |
+| `test/` | `node:test` cases for the tool loop and the file-access policy |
 
 ---
 
 ## ⚙️ Installation and Setup
+
+### Prerequisites
+
+- Node.js 20 or newer (developed on Node 24).
+- A Groq API key.
 
 ### 1. Clone the repository
 
@@ -122,8 +142,10 @@ npm install
 ### 4. Start the application
 
 ```bash
-node src/main.js
+npm start
 ```
+
+`npm start` launches `cli.js`, the same entry the `epsilon` binary points at.
 
 ### 5. Configure your API key
 
@@ -143,26 +165,34 @@ You do not need to manually add your API key to the source code.
 
 **Important:** Never commit your API keys or settings file to GitHub.
 
+### 6. Run the tests
+
+```bash
+npm test
+```
+
+The suite uses Node's built-in test runner (`node:test`) and covers the agent's tool loop and the file-access policy.
+
 ---
 
 ## 🗺️ Development Roadmap
 
-The following features are planned for upcoming development.
+The following features are tracked for upcoming development; checked items are already complete.
 
 ### Phase 1 — Core Agent Improvements
 
-- [ ] Improve LangGraph tool execution.
-- [ ] Handle multiple tool calls correctly.
-- [ ] Add robust error handling.
-- [ ] Introduce execution limits to prevent infinite agent loops.
+- [x] Improve LangGraph tool execution.
+- [x] Handle multiple tool calls correctly.
+- [x] Add robust error handling.
+- [x] Introduce execution limits to prevent infinite agent loops.
 
 ### Phase 2 — Advanced File Operations
 
 - [ ] Improve file creation and updating.
 - [ ] Add file editing capabilities.
 - [ ] Add file searching capabilities.
-- [ ] Restrict filesystem access to the selected project directory.
-- [ ] Handle file operation errors safely.
+- [x] Restrict filesystem access to the selected project directory.
+- [x] Handle file operation errors safely.
 
 ### Phase 3 — Terminal Command Execution
 
@@ -190,7 +220,8 @@ The following features are planned for upcoming development.
 
 ### Phase 6 — Reliability and Optimization
 
-- [ ] Add unit and integration tests.
+- [x] Add unit tests for the tool loop and the file-access policy.
+- [ ] Add integration tests.
 - [ ] Improve error reporting and logging.
 - [ ] Optimize large project handling.
 - [ ] Explore RAG for retrieving relevant code from large codebases.
@@ -202,14 +233,27 @@ The following features are planned for upcoming development.
 
 Security is an important part of the project's development.
 
-Planned security improvements include:
+### In place today
 
-- Keep API keys outside the project repository.
-- Avoid exposing API keys in logs or terminal output.
-- Restrict file operations to the selected project directory.
-- Require user approval for potentially destructive operations.
-- Validate tool inputs before execution.
-- Add safeguards around terminal command execution.
+- API keys live outside the repository, in `~/.epsilon-cli/settings.json`, and are never logged or printed.
+- Every file tool is confined to the workspace root; paths that escape it — including through symlinks and Windows junctions — are refused with a machine-readable reason.
+- Configuration and credential paths (`.epsilon-cli`, `settings.json`, `.env`, `.git`, `.npmrc`, `id_rsa`, `*.pem`) cannot be read or written, even when they sit inside the workspace.
+- Reads over 256 KiB are refused and returned content is capped, so the agent cannot quietly pull a huge file into the model context.
+- Tool input is validated (Zod schemas plus the path policy), and a refused call still returns a well-formed tool reply instead of crashing the loop.
+- Writes ask for approval before touching disk.
+
+### Known limitations
+
+- **Windows file permissions:** settings are written with mode `0o600`, which has no effect on Windows, so the file is not owner-only there. Anything running as your user can read the key — protect the account, not the file mode.
+- **Approval is a prompt, not a preview:** the write prompt lists target paths but does not show content, so approving a prompt-injected write is still possible. A unified diff is the next step before writes should be trusted.
+- **Absolute and relative paths are both accepted:** the boundary is enforced on every path regardless of form; workspace-relative arguments arrive with the upcoming tool rework.
+
+### Planned
+
+- Show a unified diff of every write and require approval against that diff.
+- Extend the same policy to delete, move and rename once those tools exist.
+- Add safeguards around terminal command execution once that tool exists.
+- Move secrets out of the local settings file into a real secret store.
 
 ---
 
