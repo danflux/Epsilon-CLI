@@ -181,6 +181,24 @@ test("a file over the size limit is refused", async (t) => {
   assert.equal(code, "TOO_LARGE");
 });
 
+test("a missing file and a directory are refused with NOT_FOUND", async (t) => {
+  const dir = await workspace(t);
+  const nested = path.join(dir, "nested");
+
+  const missing = await refusal(
+    readFiles.invoke({ files: [{ path: path.join(dir, "ghost.txt") }] }),
+  );
+
+  assert.equal(missing.code, "NOT_FOUND");
+
+  await fs.mkdir(nested);
+
+  // Reading a directory must surface as a refusal, not as a raw EISDIR.
+  const directory = await refusal(readFiles.invoke({ files: [{ path: nested }] }));
+
+  assert.equal(directory.code, "NOT_FOUND");
+});
+
 test("a link that escapes the workspace is rejected", async (t) => {
   const dir = await workspace(t);
   const outside = await fs.mkdtemp(path.join(os.tmpdir(), "epsilon-policy-outside-"));
